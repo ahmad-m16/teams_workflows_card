@@ -8,11 +8,15 @@ const QUERY = `
          p."name" as project_name,
          concat(u.firstname,' ',u.lastname) as assigned_to,
          wp.subject,
-         wp.created_at::date as created_on
+         wp.created_at::date as created_on,
+         co.value as support_type
   from work_packages wp
+  JOIN custom_values cv ON cv.customized_id = wp.id AND cv.customized_type = 'WorkPackage' 
+  JOIN custom_fields cf ON cf.id = cv.custom_field_id
+  join custom_options co on cv.value::int = co.id 
   left join projects p on p.id = wp.project_id
   left join users u on wp.assigned_to_id = u.id
-  where type_id = '13' and project_id = '3' and status_id != '12'
+  where type_id in ('13','14') and project_id = '3' and status_id != '12' and cf.id = 16
 `;
 
 async function fetchDataAndSendToTeams(queryText) {
@@ -38,7 +42,14 @@ async function fetchDataAndSendToTeams(queryText) {
     if (!webhookUrl) throw new Error("TEAMS_WEBHOOK_URL missing");
 
     for (const row of rows) {
-      const { id, project_name, assigned_to, subject, created_on } = row;
+      const {
+        id,
+        project_name,
+        assigned_to,
+        subject,
+        created_on,
+        support_type,
+      } = row;
 
       const card = {
         type: "message",
@@ -66,6 +77,10 @@ async function fetchDataAndSendToTeams(queryText) {
                     { title: "Assignee:", value: String(assigned_to ?? "") },
                     { title: "Subject", value: String(subject ?? "") },
                     { title: "Created Date:", value: String(created_on ?? "") },
+                    {
+                      title: "Support Type:",
+                      value: String(support_type ?? ""),
+                    },
                   ],
                 },
               ],
@@ -92,10 +107,8 @@ async function fetchDataAndSendToTeams(queryText) {
   }
 }
 
-fetchDataAndSendToTeams(QUERY);
-
 cron.schedule(
-  "0 10,17 * * *",
+  "0 10,15 * * *",
   async () => {
     console.log(`[${new Date().toISOString()}] Running scheduled job...`);
     await fetchDataAndSendToTeams(QUERY);
